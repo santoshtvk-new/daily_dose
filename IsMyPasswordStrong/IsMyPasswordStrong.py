@@ -4,6 +4,12 @@ GUI = True
 
 
 def output_message(status):
+    """
+        Composes understandable and useful insights from shared param
+        Function is responsible for only output text/message consolidation
+    :param status: dictionary with following keys ['lower_case', 'upper_case', 'special_character', 'digits', 'length', 'un_pwned', 'full_un_pwned', 'no_consecutive']
+    :return: message and evaluation-result to be prompted to user regarding validated password
+    """
     output_msg = "=============\n\n"
     verify = {
         'lower_case': "Minimum 1 lower Character",
@@ -29,6 +35,11 @@ def output_message(status):
 
 
 def validations(password):
+    """
+        ALL evaluation for provided user password to check if criteria are meet regarding ['lower_case', 'upper_case', 'special_character', 'digits', 'length', 'un_pwned', 'full_un_pwned', 'no_consecutive']
+    :param password: user password
+    :return: dictionary
+    """
     verify = dict.fromkeys(
         ['lower_case', 'upper_case', 'special_character', 'digits', 'length', 'un_pwned', 'full_un_pwned',
          'no_consecutive'], False)
