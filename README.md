@@ -1,5 +1,5 @@
 # Python Daily Dose 
-*[As part of [pynfinity.com upcoming complete python help-guide](https://pynfinity.com/welcome/about) ]*
+*[As part of [pynfinity.com WebApp \& GUI development tutorials](https://pynfinity.com/welcome/home) ]*
 
 Welcome to my Python Daily Dose! This repository showcases a collection of diverse, creative, and useful Python projects. 
 Each project is designed to be simple, with minimal dependencies, and demonstrates a broad range of Python programming concepts, 
@@ -8,7 +8,7 @@ from data visualization and automation to machine learning and algorithm develop
 ## 🏆 Projects Overview
 
 Each project is developed with a goal of being:
-- **Single-File**: The entire logic is implemented in a single Python file, easy to understand and deploy.
+- **Single-File | Single WebApp Page**: The entire logic is implemented in a single Python file, easy to understand and deploy.
 - **Self-Contained**: Minimal dependencies to ensure easy setup and execution.
 - **Modular**: Focused on various Python libraries, providing opportunities for learning new modules.
 - **Educational**: Helpful for both beginners and advanced developers understand core Python concepts.
@@ -18,9 +18,9 @@ Each project is developed with a goal of being:
 
 Here are some of the featured projects you'll find in this repository:
 
-1. **"IsMyPasswordStrong" Both UI and CLI**  
-   Take User Password and Validate its strength, score, check if it's compromised with online pwn-list, complete with a user-friendly command-line and GUI interface.
-   - Libraries used: `requests`, `tkinter` *(optional with flag)*
+1. **"IsMyPasswordStrong"**  
+   Take User Password and Validate its strength, score, check if it's compromised with online pwn-list, complete with a user-friendly GUI interface.
+   - Libraries used: `requests`, `flask`, `tkinter` *(optional for desktop GUI)*
 
 ## 🚀 Getting Started
 
@@ -31,8 +31,8 @@ To start using any project in this repository, follow these simple steps:
     git clone https://github.com/santoshtvk-new/daily_dose.git
     ```
    
-2. Navigate to the specific project directory.
-
+2. Navigate to the project directory.
+    
 3. Install dependencies (if any):
     ```bash
     pip install -r requirements.txt
