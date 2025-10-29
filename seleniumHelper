@@ -1,0 +1,230 @@
+import json
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import time
+import os
+
+# --- Database Connection (Example Stub) ---
+# In a real app, you'd use a library like sqlite3, psycopg2, or pyodbc
+def get_expected_value_from_db(item_id):
+    """
+    Placeholder function to simulate fetching a value from a database.
+    """
+    print(f"[DB] Fetching expected data for ID: {item_id}")
+    # Simulate a database lookup
+    mock_database = {
+        "user_welcome_message": "Welcome, test_user!",
+        "product_title_123": "Awesome Gadget"
+    }
+    return mock_database.get(item_id, None)
+
+# --- Core Replay Engine ---
+
+def execute_step(driver, step):
+    """
+    Executes a single automation step.
+    """
+    action = step.get("action")
+    xpath = step.get("xpath")
+    value = step.get("value")
+    wait_time = step.get("wait", 10) # Default 10-second wait
+
+    print(f"--- Executing: {action} ---")
+    
+    try:
+        if action == "goto":
+            print(f"Navigating to: {value}")
+            driver.get(value)
+            
+        elif action == "click":
+            print(f"Clicking element: {xpath}")
+            element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+            element.click()
+            
+        elif action == "type":
+            print(f"Typing '{value}' into: {xpath}")
+            element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located((By.XPATH, xpath))
+            )
+            element.clear()
+            element.send_keys(value)
+            
+        elif action == "wait_for_element":
+            print(f"Waiting for element: {xpath}")
+            WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located((By.XPATH, xpath))
+            )
+            
+        elif action == "validate_text_equals":
+            print(f"Validating text in: {xpath}")
+            element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located((By.XPATH, xpath))
+            )
+            actual_text = element.text
+            print(f"  Actual: '{actual_text}'")
+            print(f"  Expected: '{value}'")
+            assert actual_text == value
+            print("[PASS] Text validation successful.")
+            
+        elif action == "validate_text_from_db":
+            # This is your "content validation with external storage"
+            db_key = step.get("db_key")
+            expected_text = get_expected_value_from_db(db_key)
+            
+            print(f"Validating text from DB (Key: {db_key}) at: {xpath}")
+            element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located((By.XPATH, xpath))
+            )
+            actual_text = element.text
+            
+            print(f"  Actual: '{actual_text}'")
+            print(f"  Expected (from DB): '{expected_text}'")
+            assert actual_text == expected_text
+            print("[PASS] DB validation successful.")
+
+        elif action == "export_page_content":
+            # This is your "export page contents"
+            print("Exporting page source...")
+            filename = value or f"page_source_{int(time.time())}.html"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            print(f"[INFO] Page source saved to {filename}")
+
+        elif action == "sleep":
+            print(f"Sleeping for {value} seconds...")
+            time.sleep(value)
+
+        else:
+            print(f"[WARN] Unknown action: {action}")
+            
+    except TimeoutException:
+        print(f"[FAIL] Action '{action}' failed: Element not found or timed out for XPath: {xpath}")
+        raise
+    except NoSuchElementException:
+        print(f"[FAIL] Action '{action}' failed: Element not found for XPath: {xpath}")
+        raise
+    except AssertionError:
+        print(f"[FAIL] Validation failed for XPath: {xpath}")
+        raise
+    except Exception as e:
+        print(f"[FAIL] An unexpected error occurred during action '{action}': {e}")
+        raise
+
+def replay_steps(steps_filepath):
+    """
+    Loads a test file and replays all steps.
+    """
+    print(f"Loading steps from: {steps_filepath}")
+    try:
+        with open(steps_filepath, 'r') as f:
+            steps = json.load(f)
+    except FileNotFoundError:
+        print(f"[ERROR] Test file not found: {steps_filepath}")
+        return
+    except json.JSONDecodeError:
+        print(f"[ERROR] Could not decode JSON from file: {steps_filepath}")
+        return
+
+    driver = webdriver.Chrome()
+    driver.maximize_window()
+    
+    print("====== STARTING REPLAY ======")
+    try:
+        for i, step in enumerate(steps):
+            print(f"\n[Step {i+1}/{len(steps)}]")
+            execute_step(driver, step)
+        
+        print("\n====== REPLAY FINISHED SUCCESSFULLY ======")
+        
+    except Exception as e:
+        print(f"\n====== REPLAY FAILED AT STEP {i+1} ======")
+        print(f"Error: {e}")
+        # Save screenshot on failure
+        failure_screenshot = "failure_screenshot.png"
+        driver.save_screenshot(failure_screenshot)
+        print(f"Saved screenshot of failure to: {failure_screenshot}")
+        
+    finally:
+        print("Closing browser in 10 seconds...")
+        time.sleep(10)
+        driver.quit()
+
+# --- Utility Functions ---
+
+def create_example_test_file(filename="example_test.json"):
+    """
+    Creates a sample JSON test file to demonstrate the format.
+    """
+    if os.path.exists(filename):
+        print(f"'{filename}' already exists. Skipping creation.")
+        return
+        
+    print(f"Creating example test file: {filename}")
+    
+    # Let's use 'http://toscrape.com/login' as a safe example site
+    test_steps = [
+        {
+            "action": "goto",
+            "value": "http://quotes.toscrape.com/login"
+        },
+        {
+            "action": "type",
+            "xpath": "//input[@id='username']",
+            "value": "test_user"
+        },
+        {
+            "action": "type",
+            "xpath": "//input[@id='password']",
+            "value": "test_password"
+        },
+        {
+            "action": "click",
+            "xpath": "//input[@value='Login']"
+        },
+        {
+            "action": "wait_for_element",
+            "xpath": "//a[text()='Logout']",
+            "wait": 5
+        },
+        {
+            "action": "validate_text_equals",
+            "xpath": "//a[text()='Logout']",
+            "value": "Logout"
+        },
+        {
+            "action": "validate_text_from_db",
+            "xpath": "//div[@class='col-md-8']/p[1]/a",
+            "db_key": "user_welcome_message"
+        },
+        {
+            "action": "export_page_content",
+            "value": "logged_in_page.html"
+        },
+        {
+            "action": "sleep",
+            "value": 3
+        }
+    ]
+    
+    with open(filename, 'w') as f:
+        json.dump(test_steps, f, indent=4)
+
+# --- Main Execution ---
+
+if __name__ == "__main__":
+    TEST_FILE = "my_automation_steps.json"
+    
+    # 1. Create a sample test file if it doesn't exist
+    #    (This is the "export" part)
+    create_example_test_file(filename=TEST_FILE)
+    
+    # 2. Run the replay
+    #    (This is the "import" and "replay" part)
+    print("\nStarting the replay engine...")
+    replay_steps(TEST_FILE)
+
