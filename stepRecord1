@@ -1,0 +1,106 @@
+import json
+import os
+
+def print_help():
+    """Prints the available commands."""
+    print("\n--- Interactive Test Case Creator ---")
+    print("Enter the details for each step.")
+    print("Available actions:")
+    print("  goto               - Navigate to a URL")
+    print("  click              - Click an element")
+    print("  type               - Type text into an element")
+    print("  sleep              - Pause execution for a few seconds")
+    print("  validate_text_equals - Check an element's text")
+    print("  validate_text_from_db - Check text against a DB key")
+    print("  export_page_content - Save the page HTML")
+    print("  wait_for_element   - Wait for an element to appear")
+    print("\n  help               - Show this help message")
+    print("  done               - Finish and save the test file")
+    print("  quit               - Exit without saving")
+    print("---------------------------------------")
+
+def get_action():
+    """Prompts user for a valid action."""
+    valid_actions = [
+        "goto", "click", "type", "sleep", 
+        "validate_text_equals", "validate_text_from_db",
+        "export_page_content", "wait_for_element",
+        "help", "done", "quit"
+    ]
+    while True:
+        action = input("\nAction (goto, click, type, done, quit): ").strip().lower()
+        if action in valid_actions:
+            return action
+        else:
+            print("Invalid action. Type 'help' for a list of commands.")
+
+def create_test_file():
+    """Main function to build the list of steps and save to a file."""
+    steps = []
+    print_help()
+
+    while True:
+        action = get_action()
+        
+        if action == "quit":
+            print("Exiting without saving.")
+            return
+        if action == "done":
+            break
+        if action == "help":
+            print_help()
+            continue
+
+        step = {"action": action}
+
+        if action in ["click", "type", "validate_text_equals", "validate_text_from_db", "wait_for_element"]:
+            step["xpath"] = input("  XPath: ").strip()
+        
+        if action in ["goto", "type", "sleep", "export_page_content", "validate_text_equals"]:
+            step["value"] = input("  Value (URL, text, seconds, or filename): ").strip()
+            if action == "sleep":
+                try:
+                    step["value"] = int(step["value"])
+                except ValueError:
+                    print("Invalid value for sleep. Setting to 1 second.")
+                    step["value"] = 1
+
+        if action == "validate_text_from_db":
+            step["db_key"] = input("  Database Key: ").strip()
+
+        steps.append(step)
+        print(f"--- Step {len(steps)} added: {step['action']} ---")
+
+    if not steps:
+        print("No steps added. Exiting.")
+        return
+
+    # Get filename and save the test
+    default_filename = "my_automation_steps.json"
+    filename = input(f"\nEnter filename to save (default: {default_filename}): ").strip()
+    if not filename:
+        filename = default_filename
+
+    if os.path.exists(filename):
+        overwrite = input(f"'{filename}' already exists. Overwrite? (y/n): ").strip().lower()
+        if overwrite != 'y':
+            print("Save cancelled.")
+            return
+
+    try:
+        with open(filename, 'w') as f:
+            json.dump(steps, f, indent=4)
+        print(f"\nSuccessfully saved {len(steps)} steps to '{filename}'.")
+        print(f"You can now run 'python {filename.replace('create_test_interactively.py', 'selenium_replay.py')}' to replay it.")
+
+    except Exception as e:
+        print(f"An error occurred while saving the file: {e}")
+    except KeyboardInterrupt:
+        print("\nSave cancelled by user.")
+
+if __name__ == "__main__":
+    try:
+        create_test_file()
+    except KeyboardInterrupt:
+        print("\nExiting program.")
+
