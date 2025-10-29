@@ -1,0 +1,175 @@
+import asyncio
+from playwright.async_api import async_playwright
+import json
+import time
+
+# This is the JavaScript code we will inject into the browser.
+# It's what listens to user actions.
+INJECTED_RECORDER_JS = """
+(() => {
+    console.log('[Recorder] Injecting recorder.js...');
+
+    // Function to create a basic XPath for an element
+    function createXPath(element) {
+        if (element.id) {
+            return `//*[@id='${element.id}']`;
+        }
+        if (element.tagName === 'BODY') {
+            return '/html/body';
+        }
+
+        const parent = element.parentElement;
+        if (!parent) {
+            return element.tagName;
+        }
+        
+        const siblings = Array.from(parent.children).filter(e => e.tagName === element.tagName);
+        
+        if (siblings.length > 1) {
+            const index = siblings.indexOf(element) + 1;
+            return createXPath(parent) + `/${element.tagName}[${index}]`;
+        } else {
+            return createXPath(parent) + `/${element.tagName}`;
+        }
+    }
+
+    // Function to send data back to Python
+    // We do this by logging a special, prefixed message.
+    function sendStepToPython(step) {
+        console.log(`RECORDER_STEP::${JSON.stringify(step)}`);
+    }
+
+    // --- Listen for CLICK events ---
+    document.addEventListener('click', (e) => {
+        // Ignore clicks on the recorder's own UI if it had one
+        if (e.target.id === 'my-recorder-ui') return;
+
+        const xpath = createXPath(e.target);
+        const step = {
+            action: 'click',
+            xpath: xpath,
+            value: '',
+            timestamp: Date.now()
+        };
+        sendStepToPython(step);
+    }, true); // Use 'capture' phase to get event first
+
+    // --- Listen for CHANGE events (typing) ---
+    document.addEventListener('change', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+            const xpath = createXPath(e.target);
+            const step = {
+                action: 'type',
+                xpath: xpath,
+                value: e.target.value,
+                timestamp: Date.now()
+            };
+            sendStepToPython(step);
+        }
+    }, true);
+
+    console.log('[Recorder] Event listeners attached.');
+})();
+"""
+
+async def run_recorder():
+    """
+    Launches a browser, injects the recorder, and captures steps.
+    """
+    recorded_steps = []
+    
+    start_url = input("Enter the URL to start recording from (e.g., http://quotes.toscrape.com/login): ")
+    if not start_url.startswith("http"):
+        start_url = "http://" + start_url
+
+    output_filename = "my_automation_steps.json"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False)
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        # This is where we listen for the console messages
+        # from our injected JavaScript
+        def handle_console(msg):
+            text = msg.text
+            if text.startswith("RECORDER_STEP::"):
+                try:
+                    step_data = text.split("RECORDER_STEP::", 1)[1]
+                    step = json.loads(step_data)
+                    print(f"[Captured] Action: {step['action']}, XPath: {step['xpath']}")
+                    recorded_steps.append(step)
+                except Exception as e:
+                    print(f"[Error] Could not parse step: {e}")
+
+        page.on("console", handle_console)
+
+        print(f"\n--- Starting recording session ---")
+        print(f"Navigating to {start_url}...")
+        
+        try:
+            await page.goto(start_url, wait_until="domcontentloaded")
+            await page.add_script_tag(content=INJECTED_RECORDER_JS)
+            print("\n[RECORDER IS ACTIVE]")
+            print("Perform actions in the browser. Close the browser window to stop.")
+            
+            # Wait for the page to be closed
+            await page.wait_for_event("close")
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+        finally:
+            await browser.close()
+
+    if recorded_steps:
+        # Post-process: remove duplicate 'type' events
+        # A 'change' event fires on blur, so we just keep the last value
+        final_steps = []
+        last_step_for_xpath = {}
+        
+        # Add a "goto" step at the beginning
+        final_steps.append({
+            "action": "goto",
+            "value": start_url
+        })
+        
+        for step in recorded_steps:
+            if step['action'] == 'type':
+                # Only keep the *last* typed value for an element
+                last_step_for_xpath[step['xpath']] = step
+            else:
+                final_steps.append(step)
+        
+        # Add the final 'type' steps back in
+        final_steps.extend(last_step_for_xpath.values())
+        
+        # Sort by timestamp to maintain order
+        final_steps.sort(key=lambda x: x.get('timestamp', 0))
+        
+        # Clean up steps for final JSON
+        for step in final_steps:
+            if 'timestamp' in step:
+                del step['timestamp'] # Remove temp timestamp
+
+        print(f"\n--- Recording stopped ---")
+        print(f"Captured {len(final_steps)} steps.")
+        
+        try:
+            with open(output_filename, 'w') as f:
+                json.dump(final_steps, f, indent=4)
+            print(f"Successfully saved test to: {output_filename}")
+            print(f"You can now run 'python selenium_replay.py' to replay it.")
+        except Exception as e:
+            print(f"Error saving file: {e}")
+    else:
+        print("\n--- Recording stopped ---")
+        print("No steps were recorded.")
+
+if __name__ == "__main__":
+    print("This script will launch a browser to record your actions.")
+    print("It uses Playwright, so it may need to download a browser.")
+    try:
+        asyncio.run(run_recorder())
+    except KeyboardInterrupt:
+        print("\nRecording cancelled by user.")
+
