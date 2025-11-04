@@ -1,0 +1,148 @@
+import streamlit as st
+import pandas as pd
+
+st.set_page_config(layout="wide")
+st.title("DataFrame Column Mapper")
+st.write(
+    "Match columns from a 'Source' DataFrame to a 'Target' DataFrame. "
+    "The output will be a dictionary for your `pandas.rename()` function."
+)
+
+# --- Helper Function ---
+def clean_col_name(col_name):
+    """Converts a column name to a standardized, comparable format."""
+    return str(col_name).lower().replace('_', ' ').replace('-', ' ').strip()
+
+def find_best_match(source_col, target_list):
+    """
+    Finds the best matching column in the target list for a given source column.
+    Returns the *original* target column name if a match is found, else None.
+    """
+    cleaned_source = clean_col_name(source_col)
+    for target_col in target_list:
+        if clean_col_name(target_col) == cleaned_source:
+            return target_col  # Return the original, uncleaned name
+    return None
+
+# --- 1. Define Sample DataFrames ---
+# In a real app, you might get these from file uploads, a database, etc.
+st.header("1. Sample Data (Input)")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Source DataFrame (df1)")
+    df1_data = {
+        'first_name': ['Alice', 'Bob'],
+        'last_name': ['Smith', 'Johnson'],
+        'email_address': ['a@b.com', 'c@d.com'],
+        'user_id': [101, 102],
+        'unmatched_col': ['x', 'y'] # A column that won't match
+    }
+    df1 = pd.DataFrame(df1_data)
+    st.dataframe(df1, use_container_width=True)
+
+with col2:
+    st.subheader("Target DataFrame (df2)")
+    df2_data = {
+        'First Name': ['C', 'D'],
+        'Last Name': ['E', 'F'],
+        'Email': ['g@h.com', 'i@j.com'],
+        'UserID': [103, 104],
+        'other_col': ['z', 'w'] # An extra column in the target
+    }
+    df2 = pd.DataFrame(df2_data)
+    st.dataframe(df2, use_container_width=True)
+
+# --- 2. Prepare for Matching ---
+st.header("2. Create Column Mappings")
+st.write(
+    "Use the 'Target Column' dropdowns to map columns from df1 to df2. "
+    "We've made some initial guesses for you."
+)
+
+df1_cols = list(df1.columns)
+df2_cols = list(df2.columns)
+
+# Create a "None" option for the selectbox, so users can intentionally skip a column
+target_options = ["---Select a Column---"] + df2_cols
+
+# Build the initial DataFrame for the data_editor, with our best guesses
+guessed_mappings = []
+for col1 in df1_cols:
+    best_guess = find_best_match(col1, df2_cols)
+    if best_guess:
+        guessed_mappings.append(best_guess)
+    else:
+        guessed_mappings.append(target_options[0])  # Default to "---Select---"
+
+# Create the mapping DataFrame
+mapping_df = pd.DataFrame({
+    "Source Column (from df1)": df1_cols,
+    "Target Column (from df2)": guessed_mappings
+})
+
+# --- 3. Display the Editable Matcher ---
+# Use st.data_editor to allow interactive editing
+edited_df = st.data_editor(
+    mapping_df,
+    column_config={
+        "Source Column (from df1)": st.column_config.TextColumn(
+            "Source Column (from df1)",
+            disabled=True  # Make the source column read-only
+        ),
+        "Target Column (from df2)": st.column_config.SelectboxColumn(
+            "Target Column (from df2)",
+            options=target_options,
+            required=True  # Don't allow None
+        )
+    },
+    hide_index=True,
+    use_container_width=True
+)
+
+# --- 4. Generate and Display the Output ---
+st.header("3. Results")
+
+# Filter out any rows where the user didn't select a target column
+mapped_rows = edited_df[edited_df["Target Column (from df2)"] != "---Select a Column---"]
+
+# Create the final rename dictionary
+rename_dict = pd.Series(
+    mapped_rows["Target Column (from df2)"].values,
+    index=mapped_rows["Source Column (from df1)"]
+).to_dict()
+
+st.subheader("Rename Dictionary for Pandas")
+st.write("Copy this dictionary to use with `df1.rename(columns=...)`")
+st.json(rename_dict)
+
+st.subheader("Preview of Renamed Source DataFrame")
+if not rename_dict:
+    st.warning("No columns have been mapped yet.")
+else:
+    try:
+        # Apply the renaming to the original df1
+        renamed_df = df1.rename(columns=rename_dict)
+        st.dataframe(renamed_df, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error applying rename: {e}")
+
+st.subheader("How to Use")
+st.code(
+f"""
+import pandas as pd
+
+# Assuming 'df1' is your source DataFrame
+# ...
+
+rename_dictionary = {rename_dict}
+
+# Rename the columns
+df1_renamed = df1.rename(columns=rename_dictionary)
+
+# Now 'df1_renamed' has the new column names
+print(df1_renamed.head())
+""", language="python"
+)
+
